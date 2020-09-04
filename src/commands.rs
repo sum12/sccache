@@ -101,7 +101,12 @@ fn run_server_process() -> Result<ServerStartup> {
         if err.is_elapsed() {
             Ok(ServerStartup::TimedOut)
         } else if err.is_inner() {
-            Err(err.into_inner().unwrap())
+            let innerr = err.into_inner().unwrap();
+            if format!("{}", innerr).contains("os error 98") {
+                Ok(ServerStartup::AddrInUse)
+            } else {
+                Err(innerr)
+            }
         } else {
             Err(err.into_timer().unwrap().into())
         }
@@ -281,6 +286,9 @@ fn connect_or_start_server(port: u16) -> Result<ServerConnection> {
                             port
                         );
                     }
+                }
+                ServerStartup::AddrInUse => {
+                    debug!("AddrInUse: possible parallel server bootstraps, retrying..")
                 }
                 ServerStartup::TimedOut => bail!("Timed out waiting for server startup"),
                 ServerStartup::Err { reason } => bail!("Server startup failed: {}", reason),
@@ -587,6 +595,7 @@ pub fn run_command(cmd: Command) -> Result<i32> {
                     }
                 }
                 ServerStartup::TimedOut => bail!("Timed out waiting for server startup"),
+                ServerStartup::AddrInUse => bail!("Server startup failed: Address in use"),
                 ServerStartup::Err { reason } => bail!("Server startup failed: {}", reason),
             }
         }
